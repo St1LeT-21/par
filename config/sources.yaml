@@ -1,0 +1,5 @@
+poll_interval_seconds: 300
+sources:
+  - name: bbc
+    rss_url: https://feeds.bbci.co.uk/news/rss.xml
+    enabled: true
