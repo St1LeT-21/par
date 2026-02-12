@@ -1,5 +1,9 @@
-poll_interval_seconds: 300
-sources:
-  - name: bbc
-    rss_url: https://feeds.bbci.co.uk/news/rss.xml
-    enabled: true
+{
+  "poll_interval_seconds": 300,
+  "sources": [
+    { "name": "bbc", "rss_url": "https://feeds.bbci.co.uk/news/rss.xml", "enabled": true },
+    { "name": "lenta", "rss_url": "https://lenta.ru/rss", "enabled": true },
+    { "name": "rbc", "rss_url": "https://rssexport.rbc.ru/rbcnews/news/20/full.rss", "enabled": false },
+    { "name": "ria", "rss_url": "https://ria.ru/export/rss2/index.xml", "enabled": true }
+  ]
+}

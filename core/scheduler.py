@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
 from pathlib import Path
 from typing import List, Tuple
 
-import yaml
-
 from .client_backend import check_if_news_exists, push_news_to_db
+from .file_sink import append_processed, append_raw
 from .models import NewsItem, SourceConfig
 from .rss_adapter import RssAdapter
 
@@ -22,7 +22,7 @@ def load_sources(config_path: Path = DEFAULT_CONFIG_PATH) -> Tuple[List[SourceCo
     Read YAML configuration and return source configs + poll interval.
     """
     with config_path.open("r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+        raw = _load_config(f)
 
     poll_interval = int(raw.get("poll_interval_seconds", 300))
     sources_data = raw.get("sources", [])
@@ -42,18 +42,29 @@ def load_sources(config_path: Path = DEFAULT_CONFIG_PATH) -> Tuple[List[SourceCo
     return sources, poll_interval
 
 
+def _load_config(handle) -> dict:
+    """
+    Load config as JSON. The config file is stored in JSON (which is also valid YAML).
+    """
+    return json.load(handle)
+
+
 async def process_source(source: SourceConfig) -> None:
     adapter = RssAdapter(source)
     try:
-        items = await adapter.fetch()
+        raw_entries, items = await adapter.fetch_with_raw()
     except Exception as exc:  # noqa: BLE001
         logger.error("Failed to fetch %s: %s", source.name, exc)
         return
+
+    # Save raw snapshot
+    await append_raw(source.name, raw_entries)
 
     items_sorted = sorted(items, key=lambda i: i.date, reverse=True)
     for item in items_sorted:
         if check_if_news_exists(item.header, source.name):
             logger.debug("Existing item encountered for %s, stopping iteration", source.name)
+            await append_processed(item, status="duplicate")
             break
         push_news_to_db(
             header=item.header,
@@ -63,6 +74,7 @@ async def process_source(source: SourceConfig) -> None:
             source_name=item.source_name,
             url=item.url,
         )
+        await append_processed(item, status="stored")
 
 
 async def run_forever(config_path: Path = DEFAULT_CONFIG_PATH) -> None:

@@ -16,17 +16,10 @@ HASHTAG_MAX = 20
 
 
 def _strip_html(raw: str) -> str:
-    """Best-effort HTML tag removal without requiring bs4."""
+    """Best-effort HTML tag removal using regex (no external deps)."""
     if not raw:
         return ""
-    try:
-        from bs4 import BeautifulSoup  # type: ignore
-
-        soup = BeautifulSoup(raw, "html.parser")
-        return soup.get_text(" ", strip=True)
-    except Exception:
-        # Fallback: drop tags via regex
-        return re.sub(r"<[^>]+>", " ", raw)
+    return re.sub(r"<[^>]+>", " ", raw)
 
 
 def normalize_header(title: str) -> str:

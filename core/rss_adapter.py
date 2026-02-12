@@ -33,6 +33,10 @@ class RssAdapter(SourceAdapter):
         self.source = source
 
     async def fetch(self) -> List[NewsItem]:
+        _, items = await self.fetch_with_raw()
+        return items
+
+    async def fetch_with_raw(self) -> tuple[list[dict], List[NewsItem]]:
         raw_data = await self._download_feed()
         feed = feedparser.parse(raw_data)
 
@@ -41,7 +45,9 @@ class RssAdapter(SourceAdapter):
 
         entries = feed.entries or []
         items = [normalize_entry(entry, self.source.name) for entry in entries]
-        return items
+        # feedparser returns FeedParserDict; convert to plain dict for serialization
+        raw_entries = [dict(entry) for entry in entries]
+        return raw_entries, items
 
     async def _download_feed(self) -> bytes:
         attempt = 0
