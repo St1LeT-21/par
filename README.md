@@ -1,13 +1,4 @@
-# RSS News Collector
 
-Minimal async service that polls RSS/Atom feeds, normalizes items, checks duplicates, and logs results.
-
-## Features
-- Supports RSS 2.0, RSS 1.0/RDF, Atom via `feedparser`.
-- Async fetching with httpx: 10s timeout, 3 retries, 5 MB cap, exponential backoff + jitter.
-- Normalization: strip HTML (regex), unescape entities, length caps, UTC dates, lowercase unique hashtags (max 20).
-- Deduplication by `(header, source_name)` (backend stub uses in-memory set).
-- File logging: raw feed entries and processed items.
 
 ## Structure
 ```
@@ -45,22 +36,6 @@ pip install feedparser httpx
 }
 ```
 
-## Run
-```
-python -m news_collector_git.main
-```
-Logs go to stdout; data snapshots to `data/raw.jsonl` (raw feed entries) and `data/processed.jsonl` (normalized items with status stored/duplicate).
 
-## Smoketest
-```
-python -m news_collector_git.smoke_test
-```
-Clears data files, resets in-memory dedup, polls sources until >=10 new items (usually one pass), prints progress.
 
-## Integrate backend
-Implement real storage in `core/client_backend.py` functions `check_if_news_exists` and `push_news_to_db` without changing signatures.
 
-## Next steps
-- Replace stub backend with DB/HTTP service.
-- Add rate-limit/semaphore if many sources.
-- Add metrics/healthcheck and unit tests for normalization, retries, and dedup.
