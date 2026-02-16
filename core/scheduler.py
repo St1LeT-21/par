@@ -10,6 +10,7 @@ from .client_backend import check_if_news_exists, push_news_to_db
 from .file_sink import append_processed, append_raw
 from .models import NewsItem, SourceConfig
 from .rss_adapter import RssAdapter
+from .gnews_adapter import GNewsAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,10 @@ def load_sources(config_path: Path = DEFAULT_CONFIG_PATH) -> Tuple[List[SourceCo
             sources.append(
                 SourceConfig(
                     name=item["name"],
-                    rss_url=item["rss_url"],
+                    rss_url=item.get("rss_url"),
+                    type=item.get("type", "rss"),
+                    params=item.get("params", {}),
+                    api_token=item.get("api_token"),
                     enabled=bool(item.get("enabled", True)),
                 )
             )
@@ -50,9 +54,9 @@ def _load_config(handle) -> dict:
 
 
 async def process_source(source: SourceConfig) -> None:
-    adapter = RssAdapter(source)
+    adapter = _get_adapter(source)
     try:
-        raw_entries, items = await adapter.fetch_with_raw()
+        raw_entries, items = await adapter.fetch_with_raw()  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         logger.error("Failed to fetch %s: %s", source.name, exc)
         return
@@ -107,3 +111,19 @@ async def run_once(config_path: Path = DEFAULT_CONFIG_PATH) -> None:
     tasks = [process_source(s) for s in sources if s.enabled]
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _get_adapter(source: SourceConfig):
+    if source.type == "gnews":
+        class Wrapper(GNewsAdapter):
+            async def fetch_with_raw(self):  # type: ignore[override]
+                items = await self.fetch()
+                return [], items
+
+        return Wrapper(source)
+
+    class WrapperRSS(RssAdapter):
+        async def fetch_with_raw(self):  # type: ignore[override]
+            return await super().fetch_with_raw()
+
+    return WrapperRSS(source)

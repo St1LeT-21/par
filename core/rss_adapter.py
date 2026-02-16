@@ -30,6 +30,8 @@ class SourceAdapter:
 
 class RssAdapter(SourceAdapter):
     def __init__(self, source: SourceConfig) -> None:
+        if not source.rss_url:
+            raise ValueError("RssAdapter requires rss_url in SourceConfig")
         self.source = source
 
     async def fetch(self) -> List[NewsItem]:

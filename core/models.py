@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Dict, Any, Optional
 
 
 @dataclass
 class SourceConfig:
     name: str
-    rss_url: str
+    rss_url: Optional[str] = None
+    type: str = "rss"  # "rss" or "gnews" etc.
+    params: Dict[str, Any] = field(default_factory=dict)
+    api_token: Optional[str] = None
     enabled: bool = True
 
 
