@@ -1,0 +1,15 @@
+version: "3.3"
+
+services:
+  web:
+    container_name: "web-test"
+    restart: always
+    build:
+      context: ./app
+    volumes:
+      - ./app:/usr/scr/app
+    command: ./start
+    ports:
+      - "$WEB_PORT:8000"
+    env_file:
+      - .env
