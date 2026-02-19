@@ -1,1 +1,1 @@
-# Package marker for news_collector.
+# package marker

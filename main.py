@@ -42,7 +42,10 @@ async def main() -> None:
         while True:
             sources: List[SourceConfig] = load_sources()
             for source in sources:
-                await process_source(source, client)
+                try:
+                    await process_source(source, client)
+                except Exception as exc:  # noqa: BLE001
+                    logging.warning("Source %s failed: %s", source.name, exc)
             await asyncio.sleep(SLEEP_SECONDS)
     finally:
         await client.close()
