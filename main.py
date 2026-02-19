@@ -2,9 +2,48 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
+import time
+from typing import List
 
-from .core.scheduler import run_forever
+from news_collector_git.backend_client import BackendClient
+from news_collector_git.config_loader import load_sources
+from news_collector_git.core.models import SourceConfig, NewsItem
+from news_collector_git.rss_parser import fetch_and_parse
+
+SLEEP_SECONDS = 300  # strictly per spec
+
+
+async def process_source(source: SourceConfig, client: BackendClient) -> None:
+    items = await fetch_and_parse(source)
+    # newest to oldest
+    items_sorted = sorted(items, key=lambda i: i.date, reverse=True)
+
+    for item in items_sorted:
+        payload = {
+            "title": item.header,
+            "body": item.text,
+            "source": item.source_name,
+            "hash_tags": item.hashtags,
+            "published_at": item.date.isoformat(),
+        }
+        resp = await client.save_news(payload)
+        created = bool(resp.get("created", False))
+        if not created:
+            # stop processing this feed immediately
+            break
+
+
+async def main() -> None:
+    setup_logging()
+    client = BackendClient()
+    try:
+        while True:
+            sources: List[SourceConfig] = load_sources()
+            for source in sources:
+                await process_source(source, client)
+            await asyncio.sleep(SLEEP_SECONDS)
+    finally:
+        await client.close()
 
 
 def setup_logging() -> None:
@@ -15,14 +54,5 @@ def setup_logging() -> None:
     )
 
 
-def main() -> None:
-    setup_logging()
-    try:
-        asyncio.run(run_forever())
-    except KeyboardInterrupt:
-        logging.info("Shutting down (KeyboardInterrupt)")
-        sys.exit(0)
-
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
