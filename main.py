@@ -2,20 +2,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import List
 
 from news_collector_git.backend_client import BackendClient
 from news_collector_git.config_loader import load_sources
-from news_collector_git.core.models import SourceConfig, NewsItem
+from news_collector_git.core.models import SourceConfig
+from news_collector_git.gnews_adapter import fetch_and_parse_gnews
 from news_collector_git.rss_parser import fetch_and_parse
 
 SLEEP_SECONDS = 300  # strictly per spec
 
 
 async def process_source(source: SourceConfig, client: BackendClient) -> None:
-    items = await fetch_and_parse(source)
-    # newest to oldest
+    if source.type == "gnews":
+        items = await fetch_and_parse_gnews(source)
+    else:
+        items = await fetch_and_parse(source)
+
     items_sorted = sorted(items, key=lambda i: i.date, reverse=True)
 
     for item in items_sorted:
@@ -29,7 +32,6 @@ async def process_source(source: SourceConfig, client: BackendClient) -> None:
         resp = await client.save_news(payload)
         created = bool(resp.get("created", False))
         if not created:
-            # stop processing this feed immediately
             break
 
 

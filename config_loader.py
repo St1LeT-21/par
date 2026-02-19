@@ -16,9 +16,6 @@ def load_sources(config_path: Path = DEFAULT_CONFIG_PATH) -> List[SourceConfig]:
     sources_data = raw.get("sources", [])
     sources: List[SourceConfig] = []
     for item in sources_data:
-        if item.get("type", "rss") != "rss":
-            # Skip non-RSS sources in this spec
-            continue
         if not item.get("enabled", True):
             continue
         try:
@@ -26,6 +23,9 @@ def load_sources(config_path: Path = DEFAULT_CONFIG_PATH) -> List[SourceConfig]:
                 SourceConfig(
                     name=item["name"],
                     rss_url=item.get("rss_url"),
+                    type=item.get("type", "rss"),
+                    params=item.get("params", {}),
+                    api_token=item.get("api_token"),
                     enabled=True,
                 )
             )

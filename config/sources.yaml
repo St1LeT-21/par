@@ -17,6 +17,13 @@
     { "name": "ap_top", "rss_url": "https://feeds.apnews.com/apf-topnews", "enabled": false },
     { "name": "nyt_world", "rss_url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "enabled": true },
     { "name": "ars", "rss_url": "http://feeds.arstechnica.com/arstechnica/index/", "enabled": true },
-    { "name": "hn_front", "rss_url": "https://hnrss.org/frontpage", "enabled": false }
+    { "name": "hn_front", "rss_url": "https://hnrss.org/frontpage", "enabled": false },
+    {
+      "name": "gnews_ru",
+      "type": "gnews",
+      "api_token": "YOUR_GNEWS_TOKEN",
+      "enabled": false,
+      "params": { "lang": "ru", "topic": "world", "max": 50 }
+    }
   ]
 }
