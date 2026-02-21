@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 
 import httpx
 
-from news_collector_git.core.models import NewsItem, SourceConfig
-from news_collector_git.core.normalizer import normalize_entry
+from core.models import NewsItem, SourceConfig
+from core.normalizer import normalize_entry
 
 logger = logging.getLogger(__name__)
 

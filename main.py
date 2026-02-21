@@ -4,11 +4,11 @@ import asyncio
 import logging
 from typing import List
 
-from news_collector_git.backend_client import BackendClient
-from news_collector_git.config_loader import load_sources
-from news_collector_git.core.models import SourceConfig
-from news_collector_git.gnews_adapter import fetch_and_parse_gnews
-from news_collector_git.rss_parser import fetch_and_parse
+from backend_client import BackendClient
+from config_loader import load_sources
+from core.models import SourceConfig
+from gnews_adapter import fetch_and_parse_gnews
+from rss_parser import fetch_and_parse
 
 SLEEP_SECONDS = 300  # strictly per spec
 

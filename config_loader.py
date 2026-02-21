@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List
 
-from news_collector_git.core.models import SourceConfig
+from core.models import SourceConfig
 
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = ROOT_DIR / "config" / "sources.yaml"
