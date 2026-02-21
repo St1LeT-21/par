@@ -13,13 +13,11 @@ from core.normalizer import normalize_entry
 logger = logging.getLogger(__name__)
 
 MAX_RSS_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
-REQUEST_TIMEOUT = 10  # seconds
-RETRY_ATTEMPTS = 3
 BACKOFF_BASE = 2
 
 
-async def fetch_and_parse(source: SourceConfig) -> List[NewsItem]:
-    raw_data = await _download_feed(source)
+async def fetch_and_parse(source: SourceConfig, request_timeout: int, max_retries: int) -> List[NewsItem]:
+    raw_data = await _download_feed(source, request_timeout, max_retries)
     feed = feedparser.parse(raw_data)
     if feed.bozo:
         logger.warning("Feed parse warning for %s: %s", source.name, feed.bozo_exception)
@@ -28,13 +26,13 @@ async def fetch_and_parse(source: SourceConfig) -> List[NewsItem]:
     return items
 
 
-async def _download_feed(source: SourceConfig) -> bytes:
+async def _download_feed(source: SourceConfig, request_timeout: int, max_retries: int) -> bytes:
     if not source.rss_url:
         raise ValueError(f"Source {source.name} missing rss_url")
     attempt = 0
     last_err: Exception | None = None
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        while attempt < RETRY_ATTEMPTS:
+    async with httpx.AsyncClient(timeout=request_timeout) as client:
+        while attempt < max_retries:
             attempt += 1
             try:
                 resp = await client.get(source.rss_url, follow_redirects=True)
@@ -49,13 +47,14 @@ async def _download_feed(source: SourceConfig) -> bytes:
                 last_err = exc
                 delay = (BACKOFF_BASE ** (attempt - 1))
                 logger.warning(
-                    "Attempt %d/%d failed for %s: %s (sleep %ss)",
+                    "RSS fetch failed for %s (attempt %d/%d): %s. Sleeping %ss",
+                    source.name,
                     attempt,
-                    RETRY_ATTEMPTS,
-                    source.rss_url,
+                    max_retries,
                     exc,
                     delay,
                 )
                 await asyncio.sleep(delay)
     assert last_err is not None
+    logger.warning("Source %s failed after %d attempts, skipping", source.name, max_retries)
     raise last_err

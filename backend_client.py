@@ -11,13 +11,14 @@ class BackendClient:
     HTTP client for the provided backend.
     """
 
-    def __init__(self, base_url: str | None = None, timeout: int = 10) -> None:
-        self.base_url = (base_url or os.getenv("BACKEND_BASE_URL") or "http://localhost:8000").rstrip("/")
+    def __init__(self, base_url: str | None = None, endpoint: str = "/test/save_news", timeout: int = 10) -> None:
+        self.base_url = (base_url or os.getenv("BACKEND_BASE_URL") or "http://localhost:8080").rstrip("/")
+        self.endpoint = endpoint or "/test/save_news"
         self.timeout = timeout
         self._client = httpx.AsyncClient(timeout=self.timeout)
 
     async def save_news(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        url = f"{self.base_url}/test/save_news"
+        url = f"{self.base_url}{self.endpoint}"
         resp = await self._client.post(url, json=payload)
         resp.raise_for_status()
         return resp.json()

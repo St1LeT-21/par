@@ -13,13 +13,11 @@ from core.normalizer import normalize_entry
 logger = logging.getLogger(__name__)
 
 GNEWS_URL = "https://gnews.io/api/v4/top-headlines"
-REQUEST_TIMEOUT = 10
-RETRY_ATTEMPTS = 3
 BACKOFF_BASE = 2
 
 
-async def fetch_and_parse_gnews(source: SourceConfig) -> List[NewsItem]:
-    articles = await _fetch_json(source)
+async def fetch_and_parse_gnews(source: SourceConfig, request_timeout: int, max_retries: int) -> List[NewsItem]:
+    articles = await _fetch_json(source, request_timeout, max_retries)
     entries = [_to_entry_dict(article, source) for article in articles]
     items = [normalize_entry(entry, source.name) for entry in entries]
     return items
@@ -38,15 +36,15 @@ def _build_params(source: SourceConfig) -> Dict[str, Any]:
     return params
 
 
-async def _fetch_json(source: SourceConfig) -> List[Dict[str, Any]]:
+async def _fetch_json(source: SourceConfig, request_timeout: int, max_retries: int) -> List[Dict[str, Any]]:
     params = _build_params(source)
     if not params.get("token"):
         raise ValueError(f"GNews source {source.name} requires api_token")
 
     attempt = 0
     last_err: Exception | None = None
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        while attempt < RETRY_ATTEMPTS:
+    async with httpx.AsyncClient(timeout=request_timeout) as client:
+        while attempt < max_retries:
             attempt += 1
             try:
                 resp = await client.get(GNEWS_URL, params=params)
@@ -59,7 +57,7 @@ async def _fetch_json(source: SourceConfig) -> List[Dict[str, Any]]:
                 logger.warning(
                     "GNews attempt %d/%d failed for %s: %s (sleep %ss)",
                     attempt,
-                    RETRY_ATTEMPTS,
+                    max_retries,
                     source.name,
                     exc,
                     delay,
