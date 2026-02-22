@@ -8,7 +8,7 @@ import feedparser
 import httpx
 
 from core.models import SourceConfig, NewsItem
-from core.normalizer import normalize_entry
+from core.normalizer import normalize_entry, normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,12 @@ async def fetch_and_parse(source: SourceConfig, request_timeout: int, max_retrie
         logger.warning("Feed parse warning for %s: %s", source.name, feed.bozo_exception)
     entries = feed.entries or []
     items = [normalize_entry(entry, source.name) for entry in entries]
+    # fallback: fetch full article text if missing
+    for item in items:
+        if item.url and not item.text.strip():
+            full = await _fetch_full_text(item.url, request_timeout)
+            if full:
+                item.text = normalize_text(full)
     return items
 
 
@@ -58,3 +64,46 @@ async def _download_feed(source: SourceConfig, request_timeout: int, max_retries
     assert last_err is not None
     logger.warning("Source %s failed after %d attempts, skipping", source.name, max_retries)
     raise last_err
+
+
+async def _fetch_full_text(url: str, timeout: int) -> str:
+    """
+    Best-effort fetch of article body when RSS entry has no text.
+    """
+    try:
+        import bs4  # type: ignore
+    except Exception:
+        return ""
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, follow_redirects=True)
+            resp.raise_for_status()
+            html = resp.text
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Failed to fetch full text %s: %s", url, exc)
+        return ""
+
+    try:
+        soup = bs4.BeautifulSoup(html, "html.parser")
+        # common containers
+        selectors = [
+            "article",
+            "div.article__body",
+            "div.article-body",
+            "div#article",
+            "div.content",
+        ]
+        for sel in selectors:
+            node = soup.select_one(sel)
+            if node:
+                text = node.get_text(" ", strip=True)
+                if text:
+                    return text
+        # fallback to all paragraphs
+        paragraphs = soup.find_all("p")
+        text = " ".join(p.get_text(" ", strip=True) for p in paragraphs)
+        return text
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Failed to parse full text %s: %s", url, exc)
+        return ""

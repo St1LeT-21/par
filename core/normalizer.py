@@ -81,20 +81,39 @@ def _normalize_hashtags(entry: Dict[str, Any]) -> List[str]:
 
 
 def _extract_text(entry: Dict[str, Any]) -> str:
-    # content:encoded or content[0].value is mapped to "content" by feedparser
-    if entry.get("content"):
-        contents = entry["content"]
-        if isinstance(contents, list) and contents:
-            first = contents[0]
+    """
+    Extract body text from various RSS/Atom fields.
+    Tries the most complete content first, then falls back to shorter summaries.
+    """
+
+    def _from_content(val: Any) -> str:
+        if isinstance(val, list) and val:
+            first = val[0]
             if isinstance(first, dict) and first.get("value"):
                 return str(first["value"])
-        if isinstance(contents, dict) and contents.get("value"):
-            return str(contents["value"])
+        if isinstance(val, dict) and val.get("value"):
+            return str(val.get("value", ""))
+        if isinstance(val, str):
+            return val
+        return ""
 
-    for key in ("content:encoded", "description", "summary"):
-        val = entry.get(key)
-        if val:
-            return str(val)
+    # priority chain
+    candidates = [
+        entry.get("content"),
+        entry.get("content:encoded"),
+        entry.get("summary_detail", {}).get("value") if isinstance(entry.get("summary_detail"), dict) else None,
+        entry.get("summary"),
+        entry.get("description"),
+        entry.get("yandex_fulltext"),
+        entry.get("fulltext"),
+        entry.get("subtitle"),
+        entry.get("body"),
+    ]
+
+    for cand in candidates:
+        text = _from_content(cand)
+        if text and text.strip():
+            return text
     return ""
 
 
