@@ -51,18 +51,17 @@ async def process_source(source: SourceConfig, client: BackendClient, cfg: dict)
             "hash_tags": item.hashtags,
             "published_at": item.date.isoformat(),
         }
-        try:
-            resp = await client.save_news(payload)
-        except Exception as exc:  # noqa: BLE001
-            logging.warning("Backend error for %s: %s. Treating as created=false", source.name, exc)
-            logging.info("Backend returned created=false, stopping source %s", source.name)
-            return
+        result = await client.save_news(payload)
 
-        created = bool(resp.get("created", False))
-        logging.info("Sent news to backend (source=%s, created=%s)", source.name, created)
-        if not created:
+        if result is False:
             logging.info("Backend returned created=false, stopping source %s", source.name)
-            return
+            break
+
+        if result is None:
+            logging.warning("Backend error for %s, continuing", source.name)
+            continue
+
+        logging.info("Sent news to backend (source=%s, created=True)", source.name)
 
     logging.info("Finished source: %s", source.name)
 

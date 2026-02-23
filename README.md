@@ -1,56 +1,66 @@
-# News Parser (Spec Implementation)
+# News Parser
 
-Парсер RSS, который отправляет каждую новость в внешний backend `/test/save_news` и сразу останавливается, если backend говорит, что новость уже существует.
+1) Цели и задачи проекта  
+- Асинхронно собирает новости из RSS и GNews.  
+- Отправляет каждую новость в внешний backend (`/test/save_news`).  
+- Прекращает обработку конкретного источника только если backend отвечает HTTP 200 и `created=false` (дубликат на стороне сервера).  
+- Все сетевые ошибки, таймауты и коды HTTP != 200 лишь логируются; разбор продолжается.
 
-## Ключевые правила (из ТЗ)
-- Источник уникальности — только backend (ответ `created`).
-- Новости обрабатываются от новых к старым.
-- На `created == false` — немедленно прекращаем обработку текущей ленты.
-- После прохода спим 300 секунд и повторяем цикл.
-- Никакого локального кеша/дедупа.
+2) Основные функции и возможности  
+- Загрузка RSS с `httpx` и экспоненциальным бэкоффом; лимит ленты 5 MB.  
+- Парсинг через `feedparser`, нормализация текста/дат, добор полного текста страницы при пустом контенте (BeautifulSoup).  
+- Поддержка GNews API (top-headlines), сбор по теме/запросу, нормализация в общий формат.  
+- Транспорт в backend с трёхсоставным результатом: `True` (создано), `False` (`created=false` → стоп источника), `None` (любая сетевая/HTTP/JSON ошибка → лог и продолжение).  
+- Периодический цикл: обходит все включённые источники, спит `SLEEP_SECONDS`, повторяет.
 
-## Что в коде
-- `main.py` — главный цикл: загружает источники, парсит RSS, шлёт в backend, sleep 300 c.
-- `rss_parser.py` — загрузка RSS (httpx, 3 ретрая, 5 MB лимит), парсинг `feedparser`, нормализация.
-- `backend_client.py` — POST `/test/save_news` (base url берётся из `BACKEND_BASE_URL` или `http://localhost:8000`).
-- `config_loader.py` — читает `config/sources.yaml` (JSON) и отдаёт включённые RSS-источники.
-- `core/models.py` — `SourceConfig`, `NewsItem`.
-- `core/normalizer.py` — чистка HTML, unescape, усечения, UTC даты, хэштеги.
+3) Зависимости  
+- Python 3.10+.  
+- Основные пакеты: `httpx`, `feedparser`, `beautifulsoup4`, `fastapi`/`uvicorn` (для тестового backend из репозитория), `pydantic`.  
+- Установка: `pip install -r requirements.txt`.
 
-## Конфиг источников
-`config/sources.yaml` (JSON):
-```json
-{
-  "sources": [
-    { "name": "bbc", "rss_url": "https://feeds.bbci.co.uk/news/rss.xml", "enabled": true },
-    { "name": "lenta", "rss_url": "https://lenta.ru/rss", "enabled": true },
-    { "name": "ria", "rss_url": "https://ria.ru/export/rss2/index.xml", "enabled": true }
-  ]
-}
+4) Настройка программы  
+- Конфиг источников: `config/sources.yaml`, пример:
+  ```yaml
+  sources:
+    - name: bbc
+      type: rss
+      rss_url: https://feeds.bbci.co.uk/news/rss.xml
+      enabled: true
+    - name: gnews-top
+      type: gnews
+      params:
+        topic: world
+        api_token: YOUR_TOKEN
+      enabled: true
+  ```
+  Поля `enabled: false` игнорируются.  
+- Переменные окружения:  
+  - `BACKEND_BASE_URL` (по умолчанию `http://localhost:8080`)  
+  - `BACKEND_SAVE_NEWS_ENDPOINT` (по умолчанию `/test/save_news`)  
+  - `SLEEP_SECONDS` (цикл ожидания, по умолчанию 300)  
+  - `REQUEST_TIMEOUT` (секунд, по умолчанию 10)  
+  - `MAX_RETRIES` (по умолчанию 3)  
+  - `LOG_LEVEL` (например, `INFO`, `DEBUG`).
+
+5) Запуск программы  
+- (Опционально) создать виртуальное окружение и установить зависимости.  
+- Запуск:  
+  ```bash
+  python main.py
+  ```
+  или  
+  ```bash
+  python -m main
+  ```
+  Перед запуском убедитесь, что тестовый backend поднят и принимает POST на `BACKEND_SAVE_NEWS_ENDPOINT`.
+
+6) Пример работы  
 ```
-Все `type != "rss"` или `enabled: false` игнорируются.
-
-## Запуск
+2026-02-23 10:00:00 [INFO] root: Parser started
+2026-02-23 10:00:00 [INFO] root: Processing source: bbc
+2026-02-23 10:00:01 [INFO] root: Sent news to backend (source=bbc, created=True)
+2026-02-23 10:00:02 [WARNING] root: Backend returned status 500, continuing parsing
+2026-02-23 10:00:03 [INFO] root: Backend returned created=false, stopping source bbc
+2026-02-23 10:00:03 [INFO] root: Sleeping for 300 seconds
 ```
-python -m news_collector_git.main
-```
-Переменная `BACKEND_BASE_URL` (опц.) указывает на работающий backend (Docker из TestApp-main.zip).
-
-## Формат отправки
-```json
-{
-  "title": "string",
-  "body": "string",
-  "source": "string",
-  "hash_tags": ["string"],
-  "published_at": "ISO-8601 datetime"
-}
-```
-Ожидаемый ответ backend:
-```
-{ "news_id": number, "cluster_id": number, "created": boolean }
-```
-`created=false` → стоп обработки текущей ленты до следующего цикла.
-
-## Зависимости
-Python 3.10+, `feedparser`, `httpx`.
+Лента останавливается только на `created=false`; любые другие ошибки логируются и не прерывают разбор источника.
