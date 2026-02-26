@@ -117,12 +117,59 @@ def _extract_text(entry: Dict[str, Any]) -> str:
     return ""
 
 
+def _extract_images(entry: Dict[str, Any]) -> List[str]:
+    """
+    Extract image URLs from RSS entry metadata.
+    """
+    urls: List[str] = []
+
+    def add(url: Optional[str]):
+        if not url:
+            return
+        url = str(url).strip()
+        if url and url not in urls:
+            urls.append(url)
+
+    # media content/thumbnail
+    for key in ("media_content", "media_thumbnail"):
+        val = entry.get(key)
+        if isinstance(val, list):
+            for v in val:
+                if isinstance(v, dict):
+                    add(v.get("url"))
+        elif isinstance(val, dict):
+            add(val.get("url"))
+
+    # enclosures
+    for enclosure in entry.get("enclosures", []):
+        if isinstance(enclosure, dict):
+            typ = (enclosure.get("type") or "").lower()
+            if typ.startswith("image/"):
+                add(enclosure.get("href") or enclosure.get("url"))
+
+    # img tags inside description / summary
+    for key in ("summary", "description"):
+        html_part = entry.get(key)
+        if isinstance(html_part, str) and "<img" in html_part.lower():
+            try:
+                import bs4  # type: ignore
+
+                soup = bs4.BeautifulSoup(html_part, "html.parser")
+                for img in soup.find_all("img"):
+                    add(img.get("src"))
+            except Exception:
+                continue
+
+    return urls
+
+
 def normalize_entry(entry: Dict[str, Any], source_name: str) -> NewsItem:
     header_raw = entry.get("title", "")
     text_raw = _extract_text(entry)
     date_dt = _parse_datetime(entry)
     hashtags = _normalize_hashtags(entry)
     link = entry.get("link", "")
+    image_urls = _extract_images(entry)
 
     header = normalize_header(header_raw)
     text = normalize_text(text_raw)
@@ -134,4 +181,5 @@ def normalize_entry(entry: Dict[str, Any], source_name: str) -> NewsItem:
         hashtags=hashtags,
         source_name=source_name,
         url=link,
+        image_urls=image_urls,
     )

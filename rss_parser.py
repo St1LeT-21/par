@@ -23,12 +23,16 @@ async def fetch_and_parse(source: SourceConfig, request_timeout: int, max_retrie
         logger.warning("Feed parse warning for %s: %s", source.name, feed.bozo_exception)
     entries = feed.entries or []
     items = [normalize_entry(entry, source.name) for entry in entries]
-    # fallback: fetch full article text if missing
+    # fallback: fetch full article text / images if missing
     for item in items:
-        if item.url and not item.text.strip():
-            full = await _fetch_full_text(item.url, request_timeout)
-            if full:
-                item.text = normalize_text(full)
+        need_text = not item.text.strip()
+        need_images = not item.image_urls
+        if item.url and (need_text or need_images):
+            full_text, images = await _fetch_full_text_and_images(item.url, request_timeout)
+            if full_text and need_text:
+                item.text = normalize_text(full_text)
+            if images and need_images:
+                item.image_urls = images
     return items
 
 
@@ -66,14 +70,14 @@ async def _download_feed(source: SourceConfig, request_timeout: int, max_retries
     raise last_err
 
 
-async def _fetch_full_text(url: str, timeout: int) -> str:
+async def _fetch_full_text_and_images(url: str, timeout: int) -> tuple[str, List[str]]:
     """
-    Best-effort fetch of article body when RSS entry has no text.
+    Best-effort fetch of article body/images when RSS entry has no data.
     """
     try:
         import bs4  # type: ignore
     except Exception:
-        return ""
+        return "", []
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -82,10 +86,33 @@ async def _fetch_full_text(url: str, timeout: int) -> str:
             html = resp.text
     except Exception as exc:  # noqa: BLE001
         logger.debug("Failed to fetch full text %s: %s", url, exc)
-        return ""
+        return "", []
 
     try:
         soup = bs4.BeautifulSoup(html, "html.parser")
+        images: List[str] = []
+
+        # meta images
+        for prop in ("og:image", "twitter:image"):
+            tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+            if tag and tag.get("content"):
+                images.append(tag["content"])
+
+        # article/main images
+        for sel in ["article img", "main img"]:
+            for img in soup.select(sel):
+                src = img.get("src")
+                if src:
+                    images.append(src)
+
+        # deduplicate images
+        seen = set()
+        unique_images = []
+        for u in images:
+            u = u.strip()
+            if u and u not in seen:
+                seen.add(u)
+                unique_images.append(u)
         # common containers
         selectors = [
             "article",
@@ -99,11 +126,11 @@ async def _fetch_full_text(url: str, timeout: int) -> str:
             if node:
                 text = node.get_text(" ", strip=True)
                 if text:
-                    return text
+                    return text, unique_images
         # fallback to all paragraphs
         paragraphs = soup.find_all("p")
         text = " ".join(p.get_text(" ", strip=True) for p in paragraphs)
-        return text
+        return text, unique_images
     except Exception as exc:  # noqa: BLE001
         logger.debug("Failed to parse full text %s: %s", url, exc)
-        return ""
+        return "", []

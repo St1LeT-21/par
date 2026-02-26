@@ -23,6 +23,7 @@ class NewsItem:
     hashtags: List[str]
     source_name: str
     url: str
+    image_urls: List[str]
 
     def __post_init__(self) -> None:
         # Ensure date is timezone-aware UTC to keep sorting consistent.
